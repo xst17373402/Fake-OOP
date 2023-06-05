@@ -100,8 +100,11 @@ void String_ctor(String** str, const String* rhs)
     assert( str != NULL);
     //assert(*str == NULL);
 
+    int len_cstr = strlen((rhs->data));
     String* ptr = (String*) malloc(sizeof(String));
-    memcpy(ptr,rhs,sizeof(String));
+    ptr->data   = (char*  ) malloc((len_cstr+1)*sizeof(*(rhs->data)));
+    strcpy(ptr->data,rhs->data);
+    ptr->capasity = len_cstr+1;
 
     *str = ptr;
 }
@@ -127,9 +130,15 @@ typedef struct Base
 //Base的虚表
 typedef struct Base_VFTable
 {
-    int xx;
-    void (*Base_fun1)(const Base* obj);
+    void (*Base_print)(const Base* obj);
 } Base_VFTable;
+
+//Base的虚函数  在全局进行定义
+void print(const Base* obj)
+{
+    assert(obj != NULL);
+    printf("%d\n", obj->x);
+}
 
 void Base_init(Base* obj)
 {
@@ -151,9 +160,9 @@ void Base_ctor(Base** obj)
 
 typedef struct Derive
 {
-    void* vfptr;
-    //Base  base;  直接定义Base base则实例化Derive时，会有两个虚函数指针
-    int x;
+    //void* vfptr;  不需要重新定义vfptr
+    Base  base;     //修改base中的vfptr即可，使其指向Derive的虚表
+    //int x;
     float y;
 
 } Derive;
@@ -161,8 +170,15 @@ typedef struct Derive
 //Derive的虚表
 typedef struct Derive_VFTable
 {
-    void (*Derive_fun1)(const Derive* obj);
+    void (*Derive_print)(const Derive* obj);
 }Derive_VFTable;
+
+//Derive对Base的print函数进行覆盖
+void print(const Derive* obj)
+{
+    assert(obj != NULL);
+    printf("%f\n", obj->y);
+}
 
 void Derive_ctor(Derive** obj)
 {
@@ -171,51 +187,37 @@ void Derive_ctor(Derive** obj)
 
     Derive* ptr = (Derive*)malloc(sizeof(Derive));
     Base_init((Base*)ptr);
-    ptr->y      = 0;
+    ptr->y      = 666;
 
     *obj = ptr;
 }
 
 // TODO: 实现以下宏，使得调用它时等价于obj->x (Derive obj)。
-#define PARENT_FIELD(obj, field) obj##->##field
+#define PARENT_FIELD(obj, field) obj->base.field
 
-void print(const Base* obj)
-{
-    assert(obj != NULL);
-    printf("%d\n", obj->x);
-}
 
-void print(const Derive* obj)
-{
-    assert(obj != NULL);
-    printf("%f\n", obj->y);
-}
+
 
 // TODO: 实现以下宏，使得根据obj是Base对象还是Derive对象，分别调用以上两个print函数。
 // 提示：参考虚指针&虚表的思路，添加函数指针
 #define VIRTUAL_PRINT(obj, func)
 
+
+
 int main()
 {
     printf("hello world\n");
+
+
     //实例化虚函数表
     Base_VFTable base_VFTable;
-    Base_VFTable* bb = &base_VFTable;
-    void* cc = &base_VFTable;
-
-    base_VFTable.Base_fun1 = print;
+    base_VFTable.Base_print = print;
     Derive_VFTable derive_VfTable;
-    derive_VfTable.Derive_fun1 = print;
+    derive_VfTable.Derive_print = print;
 
     {
 
         const char* k_str = "oop";
-        //String* str1;
-        //String_ctor(&str1);
-        //String* str2;
-        //String_ctor(&str2,k_str);
-        //String* str3;
-        //String_ctor(&str3,str2);
         NEW(String, str1);
         NEW(String, str2, k_str);
         NEW(String, str3, str2);
@@ -226,24 +228,24 @@ int main()
 
         DELETE(String, str1);
         DELETE(String, str2);
-        //DELETE(String, str3);  // 会不会报错？   会报错 DELETE str2之后str3也被释放了 为什么？？
+        DELETE(String, str3);  // 会不会报错？   实现深拷贝，现在不会报错
     }
 
     {
 
 
         NEW(Derive, obj);           // 子类对象
-        obj->vfptr = &derive_VfTable;
+        obj->base.vfptr = (&derive_VfTable); //将vfptr修改为指向子类虚函数表
 
         Base* ptr = (Base*)obj;     // 基类指针指向子类对象
-        ((Derive_VFTable*)(ptr->vfptr))->Derive_fun1((Derive*)ptr);
-        //derive_VfTable.Derive_fun1((Derive*)ptr);
+
+        ((Derive_VFTable*)(ptr->vfptr))->Derive_print((Derive*)ptr);  //通过基类指针指向子类的虚表中的函数
+
+
         //VIRTUAL_PRINT(ptr, print);  // 应该调用Derive对应的print
 
-        obj->x = 2;
-        int x = obj->x;
-        //PARENT_FIELD(obj, x) = 2; //预编译文本替换成了obj->x  为什么还会报错？
-        //int x = PARENT_FIELD(obj, x);  
+        PARENT_FIELD(obj, x) = 2;
+        int x = PARENT_FIELD(obj, x);
         printf("%d\n", ptr->x);  // 输出2
     }
 }
